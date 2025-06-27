@@ -7,13 +7,10 @@ def carbon_calculator(
     diet: str = "vegetables",
     meals_per_week: int = 0
 ) -> str:
-    if transport == "walk" and distance_km == 0.0:
-        notes.append("No transport details provided, assumed walking.")
-    if energy_kwh == 0.0:
-        notes.append("No energy usage provided, assumed 0 kWh.")
-    if meals_per_week == 0:
-        notes.append("No diet frequency provided, assumed no meals.")
-
+    """
+    Calculates estimated weekly carbon footprint based on transport, energy, and diet.
+    If any input is missing, it defaults to low-emission values (e.g., walking, vegetables).
+    """
     transport_emission = EMISSION_FACTORS["transport"].get(transport, 0) * distance_km
     energy_emission = EMISSION_FACTORS["energy"].get(energy, 0) * energy_kwh
     diet_emission = EMISSION_FACTORS["diet"].get(diet, 0) * meals_per_week
