@@ -86,41 +86,37 @@ prompt = ChatPromptTemplate.from_messages([
     ("human", "{input}"),
     ("placeholder", "{agent_scratchpad}"),
 ])
- 
-# Memory
-# memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
-from langchain.memory import ConversationSummaryMemory
-memory = ConversationSummaryMemory(
-    llm=llm,
-    memory_key="chat_history",
-    return_messages=True
-)
 
 # Agent setup
 tools = [carbon_calculator, suggest_alternatives]
 agent = create_tool_calling_agent(llm=llm, tools=tools, prompt=prompt)
-agent_executor = AgentExecutor(agent=agent, tools=tools, memory=memory, verbose=True)
 
-# ================================================================================================================
+#==================================================================================================
+
 import streamlit as st
 
 # Set up the Streamlit chatbot UI
 st.set_page_config(page_title="Carbon Chatbot", layout="centered")
+
+if "memory" not in st.session_state:
+    st.session_state.memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
+
+memory = st.session_state.memory
+agent_executor = AgentExecutor(agent=agent, tools=tools, memory=memory, verbose=True)
+
+#==================================================================================================
+
 st.title("♻️ Carbon Chatbot")
-st.write("Describe your lifestyle in a sentence, and I'll estimate your carbon footprint.")
+st.write("Describe your lifestyle, and I'll estimate your carbon footprint.")
 
 # Reset button
-col1, col2 = st.columns([0.1, 0.9])
-with col1:
-    if st.button("🔄", help="Reset Chat"):
-        st.session_state.chat_history = []
-        st.session_state.pop("pending_input", None)
-        memory.clear()
-        st.rerun()
+if st.button("🔄 Reset Chat", help="Reset Chat"):
+    st.session_state.chat_history = []
+    st.session_state.pop("pending_input", None)
+    memory.clear()
+    st.rerun()
 
 # Chat input
-# if "messages" not in st.session_state:
-#     st.session_state.chat_history = []
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 
@@ -138,3 +134,5 @@ if user_input:
 for message in st.session_state.chat_history:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
+
+# pydantic_core._pydantic_core.ValidationError: 1 validation error for carbon_calculator energy_kwh Input should be a valid number [type=float_type, input_value=None, input_type=NoneType] For further information visit https://errors.pydantic.dev/2.11/v/float_type
