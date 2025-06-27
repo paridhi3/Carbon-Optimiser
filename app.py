@@ -1,0 +1,140 @@
+import streamlit as st
+from dotenv import load_dotenv
+import os
+import time
+from langchain_openai import AzureChatOpenAI
+from langchain.agents import create_tool_calling_agent, AgentExecutor
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain_core.tools import tool
+from langchain.memory import ConversationBufferMemory
+ 
+# Load environment variables
+load_dotenv()
+ 
+# Emission factors
+EMISSION_FACTORS = {
+    "transport": {
+        "car_gasoline": 0.21,
+        "car_diesel": 0.23,
+        "electric_car": 0.05,
+        "bus": 0.09,
+        "train": 0.04,
+        "bike": 0.0,
+        "walk": 0.0
+    },
+    "energy": {
+        "electricity_avg": 0.4,
+        "electricity_renewable": 0.05,
+        "natural_gas": 0.19,
+        "heating_oil": 0.27
+    },
+    "diet": {
+        "beef": 5.0,
+        "lamb": 4.8,
+        "chicken": 1.8,
+        "pork": 2.4,
+        "fish": 2.0,
+        "eggs": 1.6,
+        "milk": 1.2,
+        "cheese": 3.0,
+        "lentils": 0.9,
+        "beans": 1.0,
+        "tofu": 1.3,
+        "vegetables": 0.5
+    }
+}
+ 
+@tool
+def carbon_calculator(transport: str, distance_km: float, energy: str, energy_kwh: float, diet: str, meals_per_week: int) -> str:
+    """
+    Calculates estimated weekly carbon footprint based on transport, energy, and diet.
+    """
+    transport_emission = EMISSION_FACTORS["transport"].get(transport, 0) * distance_km
+    energy_emission = EMISSION_FACTORS["energy"].get(energy, 0) * energy_kwh
+    diet_emission = EMISSION_FACTORS["diet"].get(diet, 0) * meals_per_week
+    total_emission = transport_emission + energy_emission + diet_emission
+    return f"Estimated weekly carbon footprint: {total_emission:.2f} kg CO₂"
+ 
+@tool
+def suggest_alternatives(transport: str, energy: str, diet: str) -> str:
+    """
+    Suggests lower-emission alternatives for transport, energy, and diet.
+    """
+    suggestions = []
+    if EMISSION_FACTORS["transport"].get(transport, 1) > 0.1:
+        suggestions.append("Consider switching to public transport, biking, or walking.")
+    if energy != "electricity_renewable":
+        suggestions.append("Switch to renewable electricity sources if available.")
+    if diet in ["beef", "lamb", "cheese"]:
+        suggestions.append("Reduce red meat and dairy; try lentils, beans, or vegetables.")
+    return "Suggestions:\n" + "\n".join(suggestions) if suggestions else "Your choices are already low-emission!"
+ 
+# LLM setup
+llm = AzureChatOpenAI(
+    api_key=os.getenv("AZURE_OPENAI_API_KEY"),
+    azure_endpoint=os.getenv("AZURE_OPENAI_END_POINT"),
+    deployment_name=os.getenv("deployment_name"),
+    model=os.getenv("MODEL_NAME"),
+    api_version=os.getenv("API_VERSION")
+)
+ 
+# Prompt
+prompt = ChatPromptTemplate.from_messages([
+    ("system", 
+     "You are a carbon footprint optimization assistant. Your goal is to calculate the carbon footprint and help users reduce their environmental impact by analyzing their lifestyle choices and suggesting lower-emission alternatives. Be specific, data-driven, and practical."),
+    MessagesPlaceholder(variable_name="chat_history"),
+    ("human", "{input}"),
+    ("placeholder", "{agent_scratchpad}"),
+])
+ 
+# Memory
+# memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
+from langchain.memory import ConversationSummaryMemory
+memory = ConversationSummaryMemory(
+    llm=llm,
+    memory_key="chat_history",
+    return_messages=True
+)
+
+# Agent setup
+tools = [carbon_calculator, suggest_alternatives]
+agent = create_tool_calling_agent(llm=llm, tools=tools, prompt=prompt)
+agent_executor = AgentExecutor(agent=agent, tools=tools, memory=memory, verbose=True)
+
+# ================================================================================================================
+import streamlit as st
+
+# Set up the Streamlit chatbot UI
+st.set_page_config(page_title="Carbon Chatbot", layout="centered")
+st.title("♻️ Carbon Chatbot")
+st.write("Describe your lifestyle in a sentence, and I'll estimate your carbon footprint.")
+
+# Reset button
+col1, col2 = st.columns([0.1, 0.9])
+with col1:
+    if st.button("🔄", help="Reset Chat"):
+        st.session_state.chat_history = []
+        st.session_state.pop("pending_input", None)
+        memory.clear()
+        st.rerun()
+
+# Chat input
+# if "messages" not in st.session_state:
+#     st.session_state.chat_history = []
+if "chat_history" not in st.session_state:
+    st.session_state.chat_history = []
+
+user_input = st.chat_input("Tell me about your travel, energy, and diet habits...")
+
+if user_input:
+    with st.spinner("Thinking..."):
+        response = agent_executor.invoke({"input": user_input})
+        print(response)
+        # Store the messages only for UI rendering
+        st.session_state.chat_history.append({"role": "user", "content": user_input})
+        st.session_state.chat_history.append({"role": "assistant", "content": response["output"]})
+
+# Display chat history
+for message in st.session_state.chat_history:
+    with st.chat_message(message["role"]):
+        st.markdown(message["content"])
