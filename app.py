@@ -212,7 +212,11 @@ if user_input:
             st.warning("Could not parse input. Try rephrasing.")
             st.stop()
 
-        response = agent_executor.invoke({"input": parsed_response})
+        # response = agent_executor.invoke({"input": parsed_response})
+        response = agent_executor.invoke({
+         "input": f"Here are the extracted details: {parsed_response}. Also, the user said: {user_input}"
+        })
+
 
         # Save chat history
         st.session_state.chat_history.append({"role": "user", "content": user_input})
