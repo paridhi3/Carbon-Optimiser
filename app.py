@@ -104,6 +104,44 @@ agent = create_tool_calling_agent(llm=llm, tools=tools, prompt=prompt)
 
 #==================================================================================================
 
+# CHAINING
+from langchain.prompts import PromptTemplate
+from langchain.chains import LLMChain
+
+extraction_template = PromptTemplate.from_template("""
+Extract the following details from the user input:
+
+transport: one of {valid_transports}
+distance_km: number (total weekly distance in km)
+energy: one of {valid_energies}
+energy_kwh: number
+diet: one of {valid_diets}
+meals_per_week: number
+
+Respond ONLY in this JSON format:
+{{
+  "transport": ...,
+  "distance_km": ...,
+  "energy": ...,
+  "energy_kwh": ...,
+  "diet": ...,
+  "meals_per_week": ...
+}}
+
+User input: {input}
+""")
+
+extraction_chain = LLMChain(
+    llm=llm,
+    prompt=extraction_template.partial(
+        valid_transports=", ".join(EMISSION_FACTORS["transport"].keys()),
+        valid_energies=", ".join(EMISSION_FACTORS["energy"].keys()),
+        valid_diets=", ".join(EMISSION_FACTORS["diet"].keys())
+    )
+)
+
+#==================================================================================================
+
 import streamlit as st
 
 # Set up the Streamlit chatbot UI
@@ -133,13 +171,41 @@ if "chat_history" not in st.session_state:
 
 user_input = st.chat_input("Tell me about your travel, energy, and diet habits...")
 
+# if user_input:
+#     with st.spinner("Thinking..."):
+#         response = agent_executor.invoke({"input": user_input})
+#         print(response)
+#         # Store the messages only for UI rendering
+#         st.session_state.chat_history.append({"role": "user", "content": user_input})
+#         st.session_state.chat_history.append({"role": "assistant", "content": response["output"]})
+
 if user_input:
     with st.spinner("Thinking..."):
-        response = agent_executor.invoke({"input": user_input})
-        print(response)
-        # Store the messages only for UI rendering
+        # Extract input details
+        parsed_response = extraction_chain.run(input=user_input)
+
+        try:
+            parsed_data = eval(parsed_response)  # JSON-safe in prod: json.loads()
+            for key, value in parsed_data.items():
+                if value not in [None, "", "null"]:
+                    st.session_state.footprint_inputs[key] = value
+        except Exception as e:
+            st.warning("Could not parse input. Try rephrasing.")
+            st.stop()
+
+        if ready_for_calculation(st.session_state.footprint_inputs):
+            response = agent_executor.invoke({
+                "input": f"Calculate my carbon footprint based on: {st.session_state.footprint_inputs}"
+            })
+        else:
+            response = {
+                "output": "Thanks! Could you also tell me about your diet, energy use, or how far you travel weekly?"
+            }
+
+        # Save chat history
         st.session_state.chat_history.append({"role": "user", "content": user_input})
         st.session_state.chat_history.append({"role": "assistant", "content": response["output"]})
+
 
 # Display chat history
 for message in st.session_state.chat_history:
