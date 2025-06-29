@@ -44,17 +44,6 @@ EMISSION_FACTORS = {
         "vegetables": 0.5
     }
 }
- 
-# @tool
-# def carbon_calculator(transport: str, distance_km: float, energy: str, energy_kwh: float, diet: str, meals_per_week: int) -> str:
-#     """
-#     Calculates estimated weekly carbon footprint based on transport, energy, and diet.
-#     """
-#     transport_emission = EMISSION_FACTORS["transport"].get(transport, 0) * distance_km
-#     energy_emission = EMISSION_FACTORS["energy"].get(energy, 0) * energy_kwh
-#     diet_emission = EMISSION_FACTORS["diet"].get(diet, 0) * meals_per_week
-#     total_emission = transport_emission + energy_emission + diet_emission
-#     return f"Estimated weekly carbon footprint: {total_emission:.2f} kg CO₂"
 
 @tool
 def carbon_calculator(transport: str = "walk", distance_km: float = 0.0, energy: str = "electricity_avg", energy_kwh: float = 0.0, diet: str = "vegetables", meals_per_week: int = 0) -> str:
@@ -179,14 +168,6 @@ if "chat_history" not in st.session_state:
 
 user_input = st.chat_input("Tell me about your travel, energy, and diet habits...")
 
-# if user_input:
-#     with st.spinner("Thinking..."):
-#         response = agent_executor.invoke({"input": user_input})
-#         print(response)
-#         # Store the messages only for UI rendering
-#         st.session_state.chat_history.append({"role": "user", "content": user_input})
-#         st.session_state.chat_history.append({"role": "assistant", "content": response["output"]})
-
 if user_input:
     with st.spinner("Thinking..."):
 
@@ -227,4 +208,3 @@ if user_input:
 for message in st.session_state.chat_history:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
-
